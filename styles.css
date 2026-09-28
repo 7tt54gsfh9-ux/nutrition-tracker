@@ -631,6 +631,28 @@ button { cursor: pointer; }
 .search-status.error { color: var(--danger); }
 .search-status.ok { color: var(--primary); }
 
+.search-status-text { margin-right: 6px; }
+
+.search-retry-btn {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 4px 12px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.search-retry-btn:hover,
+.search-retry-btn:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
 .search-results {
   display: flex;
   flex-direction: column;

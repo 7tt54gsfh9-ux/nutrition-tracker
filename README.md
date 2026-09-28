@@ -18,7 +18,7 @@ Any static server works (`npx serve`, `php -S`, etc.). Prefer **localhost** (or 
 
 - **Today dashboard** — calorie ring vs daily goal, macro bars, entries grouped by meal
 - **Add food** — name, meal type, serving, calories, optional protein/carbs/fat, notes
-- **Search food** — type a product name; debounced lookup via [Open Food Facts](https://world.openfoodfacts.org/) search API; pick a result to prefill nutrients (per serving or per 100 g), then adjust servings/meal and save
+- **Search food** — type a product name; debounced lookup via [Open Food Facts](https://world.openfoodfacts.org/) (`cgi/search.pl`) with automatic retries across world/us/uk/fr mirrors (handles intermittent 503s); pick a result to prefill nutrients (per serving or per 100 g), then adjust servings/meal and save
 - **Barcode** — camera scan (html5-qrcode) or type/paste; lookup via Open Food Facts product API; form is prefilled and editable before save
 - **Edit / delete** logged entries
 - **History** — jump to previous days that have logs
@@ -28,7 +28,7 @@ Any static server works (`npx serve`, `php -S`, etc.). Prefer **localhost** (or 
 ## Limitations
 
 - **Camera** needs permission and a secure context (HTTPS or `localhost`). If the camera fails, use **Type / paste**.
-- **Open Food Facts** coverage varies by country and product; name search and barcodes can return incomplete nutrition or occasional API 503s. You can always edit values or add food manually.
+- **Open Food Facts** coverage varies by country and product; name search can hit intermittent 503s (especially on mobile Safari). The app retries with backoff across mirrors and shows a **Retry** button if all attempts fail. You can always edit values or add food manually.
 - Data lives only in **this browser’s localStorage** — clearing site data or using another device/browser will not carry it over.
 - Nutrition values from barcodes are typically per serving or per 100 g as reported by the product database; double-check before relying on them.
 

@@ -431,9 +431,19 @@
 
 
   // ---------- Food name search / Open Food Facts ----------
-  const SEARCH_DEBOUNCE_MS = 400;
+  // cgi/search.pl intermittently returns 503 HTML *without* CORS headers, which
+  // browsers surface as a failed fetch (common on mobile Safari). Mitigate with
+  // multi-mirror retries + backoff. User-Agent cannot be set from the browser.
+  const SEARCH_DEBOUNCE_MS = 550;
   const SEARCH_MIN_CHARS = 2;
   const SEARCH_PAGE_SIZE = 20;
+  const SEARCH_MAX_ATTEMPTS = 6;
+  const OFF_SEARCH_HOSTS = [
+    "https://world.openfoodfacts.org",
+    "https://us.openfoodfacts.org",
+    "https://uk.openfoodfacts.org",
+    "https://fr.openfoodfacts.org",
+  ];
 
   function openSearchModal() {
     document.getElementById("search-overlay").hidden = false;
@@ -456,11 +466,25 @@
     document.getElementById("search-overlay").hidden = true;
   }
 
-  function setSearchStatus(msg, cls) {
+  function setSearchStatus(msg, cls, opts) {
     const el = document.getElementById("search-status");
     el.className = "search-status" + (cls ? " " + cls : "");
+    const retryQuery = opts && opts.retryQuery;
     if (cls === "loading") {
-      el.innerHTML = '<span class="search-spinner" aria-hidden="true"></span>' + escapeHtml(msg);
+      el.innerHTML =
+        '<span class="search-spinner" aria-hidden="true"></span>' + escapeHtml(msg);
+    } else if (cls === "error" && retryQuery) {
+      el.innerHTML =
+        '<span class="search-status-text">' +
+        escapeHtml(msg) +
+        '</span> <button type="button" class="search-retry-btn" id="search-retry-btn">Retry</button>';
+      const btn = document.getElementById("search-retry-btn");
+      if (btn) {
+        btn.addEventListener("click", () => {
+          setSearchStatus("Retrying…", "loading");
+          searchFoods(retryQuery);
+        });
+      }
     } else {
       el.textContent = msg;
     }
@@ -487,6 +511,112 @@
     searchTimer = setTimeout(() => searchFoods(q), SEARCH_DEBOUNCE_MS);
   }
 
+  function sleep(ms, signal) {
+    return new Promise((resolve, reject) => {
+      if (signal && signal.aborted) {
+        reject(Object.assign(new Error("Aborted"), { name: "AbortError" }));
+        return;
+      }
+      const t = setTimeout(resolve, ms);
+      if (signal) {
+        const onAbort = () => {
+          clearTimeout(t);
+          reject(Object.assign(new Error("Aborted"), { name: "AbortError" }));
+        };
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
+    });
+  }
+
+  function normalizeOffProduct(p) {
+    if (!p || typeof p !== "object") return p;
+    const out = { ...p };
+    if (Array.isArray(out.brands)) {
+      out.brands = out.brands.filter(Boolean).join(", ");
+    }
+    return out;
+  }
+
+  function buildCgiSearchUrl(host, q) {
+    return (
+      host.replace(/\/$/, "") +
+      "/cgi/search.pl?" +
+      new URLSearchParams({
+        search_terms: q,
+        search_simple: "1",
+        action: "process",
+        json: "1",
+        page_size: String(SEARCH_PAGE_SIZE),
+      }).toString()
+    );
+  }
+
+  async function fetchCgiSearch(host, q, signal) {
+    const res = await fetch(buildCgiSearchUrl(host, q), {
+      signal,
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    // 503 HTML error pages often omit CORS → fetch throws before here.
+    // When status is visible, treat overload as retryable.
+    if (res.status === 502 || res.status === 503 || res.status === 504 || res.status === 429) {
+      const err = new Error("HTTP " + res.status);
+      err.retryable = true;
+      throw err;
+    }
+    if (!res.ok) {
+      const err = new Error("HTTP " + res.status);
+      err.retryable = res.status >= 500;
+      throw err;
+    }
+    const ct = (res.headers.get("content-type") || "").toLowerCase();
+    if (ct && !ct.includes("json") && !ct.includes("javascript")) {
+      const err = new Error("Non-JSON response");
+      err.retryable = true;
+      throw err;
+    }
+    const data = await res.json();
+    if (!data || !Array.isArray(data.products)) {
+      const err = new Error("Unexpected search payload");
+      err.retryable = true;
+      throw err;
+    }
+    return data;
+  }
+
+  async function fetchOffSearchWithRetries(q, signal) {
+    let lastErr = null;
+    // Start on a rotating host so concurrent users don't all hammer world.
+    const start = Math.floor(Math.random() * OFF_SEARCH_HOSTS.length);
+    for (let attempt = 0; attempt < SEARCH_MAX_ATTEMPTS; attempt++) {
+      if (signal.aborted) {
+        throw Object.assign(new Error("Aborted"), { name: "AbortError" });
+      }
+      const host = OFF_SEARCH_HOSTS[(start + attempt) % OFF_SEARCH_HOSTS.length];
+      try {
+        if (attempt > 0) {
+          // Gentle backoff: 400, 800, 1200, … ms (plus small jitter)
+          const delay = 400 * attempt + Math.floor(Math.random() * 200);
+          await sleep(delay, signal);
+        }
+        return await fetchCgiSearch(host, q, signal);
+      } catch (err) {
+        if (err && err.name === "AbortError") throw err;
+        lastErr = err;
+        // Network / CORS failures (typical for 503 without ACAO) are retryable.
+        const retryable =
+          (err && err.retryable) ||
+          (err && err.name === "TypeError") ||
+          (err && /failed to fetch|network|load failed/i.test(String(err.message || err)));
+        if (!retryable && attempt === 0) {
+          // Still retry once on unknown errors — OFF flakiness is common.
+        }
+        console.warn("OFF search attempt", attempt + 1, host, err);
+      }
+    }
+    throw lastErr || new Error("Search failed");
+  }
+
   async function searchFoods(query) {
     const q = String(query || "").trim();
     if (q.length < SEARCH_MIN_CHARS) return;
@@ -494,37 +624,25 @@
     const seq = ++searchSeq;
     if (searchAbort) searchAbort.abort();
     searchAbort = new AbortController();
-
-    const url =
-      "https://world.openfoodfacts.org/cgi/search.pl?" +
-      new URLSearchParams({
-        search_terms: q,
-        search_simple: "1",
-        action: "process",
-        json: "1",
-        page_size: String(SEARCH_PAGE_SIZE),
-      }).toString();
+    const signal = searchAbort.signal;
 
     try {
-      const res = await fetch(url, {
-        signal: searchAbort.signal,
-        headers: { Accept: "application/json" },
-      });
+      const data = await fetchOffSearchWithRetries(q, signal);
       if (seq !== searchSeq) return;
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const data = await res.json();
-      if (seq !== searchSeq) return;
-      const products = Array.isArray(data.products) ? data.products : [];
+      const products = (Array.isArray(data.products) ? data.products : []).map(
+        normalizeOffProduct
+      );
       renderSearchResults(products, q, data.count);
     } catch (err) {
       if (err && err.name === "AbortError") return;
       console.warn(err);
       if (seq !== searchSeq) return;
+      // Keep any previous results visible (partial / prior success).
       setSearchStatus(
         "Search failed. Open Food Facts may be busy — try again in a moment.",
-        "error"
+        "error",
+        { retryQuery: q }
       );
-      document.getElementById("search-results").innerHTML = "";
     } finally {
       if (seq === searchSeq) searchAbort = null;
     }
