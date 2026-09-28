@@ -1,6 +1,6 @@
 /**
  * Nutrition Tracker — localStorage SPA
- * Defaults: 2000 kcal/day; Open Food Facts for barcodes.
+ * Defaults: 2000 kcal/day; Open Food Facts for name search + barcodes.
  */
 
 (function () {
@@ -32,6 +32,9 @@
   let selectedDate = todayISO();
   let html5QrCode = null;
   let scanBusy = false;
+  let searchTimer = null;
+  let searchAbort = null;
+  let searchSeq = 0;
 
   // ---------- Persistence ----------
   function loadState() {
@@ -192,7 +195,7 @@
     const root = document.getElementById("entries-by-meal");
     if (!entries.length) {
       root.innerHTML =
-        '<div class="empty-state"><p>No food logged yet</p><p class="hint">Add a meal or scan a barcode to get started.</p></div>';
+        '<div class="empty-state"><p>No food logged yet</p><p class="hint">Add a meal, search by name, or scan a barcode.</p></div>';
       return;
     }
 
@@ -299,7 +302,13 @@
     document.getElementById("entry-meal").value = guessMealType();
     if (prefills) applyPrefills(prefills);
     showModal(true);
-    setTimeout(() => document.getElementById("entry-name").focus(), 100);
+    setTimeout(() => {
+      const el = prefills
+        ? document.getElementById("entry-serving")
+        : document.getElementById("entry-name");
+      el.focus();
+      if (prefills && typeof el.select === "function") el.select();
+    }, 100);
   }
 
   function openEditModal(id) {
@@ -418,6 +427,208 @@
     selectedDate = todayISO();
     fillSettingsForm();
     renderToday();
+  }
+
+
+  // ---------- Food name search / Open Food Facts ----------
+  const SEARCH_DEBOUNCE_MS = 400;
+  const SEARCH_MIN_CHARS = 2;
+  const SEARCH_PAGE_SIZE = 20;
+
+  function openSearchModal() {
+    document.getElementById("search-overlay").hidden = false;
+    const input = document.getElementById("food-search-input");
+    input.value = "";
+    setSearchStatus("Type at least 2 characters to search Open Food Facts.", "");
+    document.getElementById("search-results").innerHTML = "";
+    setTimeout(() => input.focus(), 100);
+  }
+
+  function closeSearchModal() {
+    if (searchTimer) {
+      clearTimeout(searchTimer);
+      searchTimer = null;
+    }
+    if (searchAbort) {
+      searchAbort.abort();
+      searchAbort = null;
+    }
+    document.getElementById("search-overlay").hidden = true;
+  }
+
+  function setSearchStatus(msg, cls) {
+    const el = document.getElementById("search-status");
+    el.className = "search-status" + (cls ? " " + cls : "");
+    if (cls === "loading") {
+      el.innerHTML = '<span class="search-spinner" aria-hidden="true"></span>' + escapeHtml(msg);
+    } else {
+      el.textContent = msg;
+    }
+  }
+
+  function onSearchInput() {
+    const q = document.getElementById("food-search-input").value.trim();
+    if (searchTimer) clearTimeout(searchTimer);
+    if (searchAbort) {
+      searchAbort.abort();
+      searchAbort = null;
+    }
+    if (q.length < SEARCH_MIN_CHARS) {
+      setSearchStatus(
+        q.length === 0
+          ? "Type at least 2 characters to search Open Food Facts."
+          : "Keep typing… (min 2 characters)",
+        ""
+      );
+      document.getElementById("search-results").innerHTML = "";
+      return;
+    }
+    setSearchStatus("Searching…", "loading");
+    searchTimer = setTimeout(() => searchFoods(q), SEARCH_DEBOUNCE_MS);
+  }
+
+  async function searchFoods(query) {
+    const q = String(query || "").trim();
+    if (q.length < SEARCH_MIN_CHARS) return;
+
+    const seq = ++searchSeq;
+    if (searchAbort) searchAbort.abort();
+    searchAbort = new AbortController();
+
+    const url =
+      "https://world.openfoodfacts.org/cgi/search.pl?" +
+      new URLSearchParams({
+        search_terms: q,
+        search_simple: "1",
+        action: "process",
+        json: "1",
+        page_size: String(SEARCH_PAGE_SIZE),
+      }).toString();
+
+    try {
+      const res = await fetch(url, {
+        signal: searchAbort.signal,
+        headers: { Accept: "application/json" },
+      });
+      if (seq !== searchSeq) return;
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      if (seq !== searchSeq) return;
+      const products = Array.isArray(data.products) ? data.products : [];
+      renderSearchResults(products, q, data.count);
+    } catch (err) {
+      if (err && err.name === "AbortError") return;
+      console.warn(err);
+      if (seq !== searchSeq) return;
+      setSearchStatus(
+        "Search failed. Open Food Facts may be busy — try again in a moment.",
+        "error"
+      );
+      document.getElementById("search-results").innerHTML = "";
+    } finally {
+      if (seq === searchSeq) searchAbort = null;
+    }
+  }
+
+  function renderSearchResults(products, query, totalCount) {
+    const root = document.getElementById("search-results");
+    const usable = products.filter((p) => {
+      const name = p.product_name || p.product_name_en || p.generic_name;
+      return name && String(name).trim();
+    });
+
+    if (!usable.length) {
+      setSearchStatus("No products found for \"" + query + "\". Try another name.", "");
+      root.innerHTML =
+        '<div class="search-empty">No matches. Check spelling or add food manually.</div>';
+      return;
+    }
+
+    const shown = usable.length;
+    const total = typeof totalCount === "number" ? totalCount : shown;
+    setSearchStatus(
+      total > shown
+        ? `Showing ${shown} of ${total.toLocaleString()} matches — tap one to add.`
+        : `Found ${shown} match${shown === 1 ? "" : "es"} — tap one to add.`,
+      "ok"
+    );
+
+    root.innerHTML = usable
+      .map((p, i) => {
+        const summary = summarizeProduct(p);
+        const brand = summary.brand
+          ? `<p class="search-result-brand">${escapeHtml(summary.brand)}</p>`
+          : "";
+        return `<button type="button" class="search-result" role="option" data-search-idx="${i}">
+          <p class="search-result-name">${escapeHtml(summary.name)}</p>
+          ${brand}
+          <p class="search-result-nutri">${escapeHtml(summary.nutriLine)}
+            <span class="search-result-basis">${escapeHtml(summary.basisLabel)}</span>
+          </p>
+        </button>`;
+      })
+      .join("");
+
+    // Keep products for click handlers (avoid embedding large JSON in DOM)
+    root._searchProducts = usable;
+
+    root.querySelectorAll("[data-search-idx]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const idx = Number(btn.dataset.searchIdx);
+        const product = root._searchProducts && root._searchProducts[idx];
+        if (!product) return;
+        selectSearchProduct(product);
+      });
+    });
+  }
+
+  function summarizeProduct(p) {
+    const prefills = mapOpenFoodFacts(p);
+    const brand = p.brands ? String(p.brands).split(",")[0].trim() : "";
+    const n = p.nutriments || {};
+    const hasServing =
+      (n["energy-kcal_serving"] != null || n.energy_kcal_serving != null) &&
+      p.serving_size;
+    const basisLabel = hasServing
+      ? `Per serving (${p.serving_size})`
+      : "Per 100 g";
+
+    const parts = [];
+    parts.push(`${prefills.calories} kcal`);
+    if (prefills.protein != null) parts.push(`P ${fmtMacro(prefills.protein)}g`);
+    if (prefills.carbs != null) parts.push(`C ${fmtMacro(prefills.carbs)}g`);
+    if (prefills.fat != null) parts.push(`F ${fmtMacro(prefills.fat)}g`);
+
+    // Prefer product name without forcing brand into title for list (brand shown separately)
+    const name =
+      p.product_name ||
+      p.product_name_en ||
+      p.generic_name ||
+      brand ||
+      "Unknown product";
+
+    const nameStr = String(name).trim().slice(0, 120);
+    const showBrand =
+      brand && !nameStr.toLowerCase().includes(brand.toLowerCase()) ? brand : "";
+    return {
+      name: nameStr,
+      brand: showBrand,
+      nutriLine: parts.join(" · "),
+      basisLabel,
+      prefills,
+    };
+  }
+
+  function selectSearchProduct(product) {
+    const prefills = mapOpenFoodFacts(product);
+    // Prefer a clearer note for search-sourced items
+    if (product.code && !prefills.notes) {
+      prefills.notes = "OFF " + product.code;
+    } else if (product.code) {
+      prefills.notes = "Open Food Facts · " + product.code;
+    }
+    closeSearchModal();
+    openAddModal(prefills);
   }
 
   // ---------- Barcode / Open Food Facts ----------
@@ -616,7 +827,22 @@
     });
 
     document.getElementById("btn-add").addEventListener("click", () => openAddModal());
+    document.getElementById("btn-search").addEventListener("click", openSearchModal);
     document.getElementById("btn-barcode").addEventListener("click", openBarcodeModal);
+
+    document.getElementById("search-close").addEventListener("click", closeSearchModal);
+    document.getElementById("search-overlay").addEventListener("click", (e) => {
+      if (e.target.id === "search-overlay") closeSearchModal();
+    });
+    document.getElementById("food-search-input").addEventListener("input", onSearchInput);
+    document.getElementById("food-search-input").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (searchTimer) clearTimeout(searchTimer);
+        const q = e.target.value.trim();
+        if (q.length >= SEARCH_MIN_CHARS) searchFoods(q);
+      }
+    });
 
     document.getElementById("modal-close").addEventListener("click", closeModal);
     document.getElementById("btn-cancel").addEventListener("click", closeModal);
@@ -647,7 +873,8 @@
 
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
-        if (!document.getElementById("barcode-overlay").hidden) closeBarcodeModal();
+        if (!document.getElementById("search-overlay").hidden) closeSearchModal();
+        else if (!document.getElementById("barcode-overlay").hidden) closeBarcodeModal();
         else if (!document.getElementById("modal-overlay").hidden) closeModal();
       }
     });

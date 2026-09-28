@@ -75,6 +75,7 @@
 
         <div class="actions-row">
           <button type="button" class="btn btn-primary" id="btn-add">+ Add food</button>
+          <button type="button" class="btn btn-secondary" id="btn-search">Search food</button>
           <button type="button" class="btn btn-secondary" id="btn-barcode">Scan barcode</button>
         </div>
 
@@ -206,6 +207,25 @@
           <button type="button" class="btn btn-primary" id="btn-lookup">Look up</button>
         </div>
         <p id="barcode-status" class="barcode-status" aria-live="polite"></p>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- FOOD SEARCH MODAL -->
+  <div id="search-overlay" class="modal-overlay" hidden>
+    <div class="modal modal-wide" role="dialog" aria-labelledby="search-title" aria-modal="true">
+      <div class="modal-header">
+        <h2 id="search-title">Search food</h2>
+        <button type="button" class="icon-btn" id="search-close" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <label class="field">
+          <span>Product name</span>
+          <input type="search" id="food-search-input" placeholder="e.g. whey protein, greek yogurt" autocomplete="off" enterkeyhint="search" />
+        </label>
+        <p id="search-status" class="search-status" aria-live="polite">Type at least 2 characters to search Open Food Facts.</p>
+        <div id="search-results" class="search-results" role="listbox" aria-label="Search results"></div>
       </div>
     </div>
   </div>

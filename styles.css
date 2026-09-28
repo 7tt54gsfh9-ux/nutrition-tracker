@@ -269,8 +269,18 @@ button { cursor: pointer; }
 /* Actions */
 .actions-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 20px;
+}
+
+.actions-row .btn-primary {
+  flex: 1 1 100%;
+}
+
+.actions-row .btn-secondary {
+  flex: 1 1 calc(50% - 5px);
+  min-width: 0;
 }
 
 .btn {
@@ -608,6 +618,98 @@ button { cursor: pointer; }
 
 .barcode-status.error { color: var(--danger); }
 .barcode-status.ok { color: var(--primary); font-weight: 600; }
+
+
+/* Food search */
+.search-status {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  color: var(--muted);
+  min-height: 1.3em;
+}
+
+.search-status.error { color: var(--danger); }
+.search-status.ok { color: var(--primary); }
+
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(55dvh, 420px);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: var(--safe-bottom);
+}
+
+.search-result {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.search-result:hover,
+.search-result:focus {
+  background: var(--primary-soft);
+  border-color: transparent;
+  outline: none;
+}
+
+.search-result-name {
+  margin: 0 0 2px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  word-break: break-word;
+}
+
+.search-result-brand {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.search-result-nutri {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+
+.search-result-basis {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.search-empty {
+  text-align: center;
+  padding: 20px 12px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.search-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  vertical-align: -2px;
+  margin-right: 6px;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 
 /* Desktop modal center */
 @media (min-width: 560px) {

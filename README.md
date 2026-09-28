@@ -1,6 +1,6 @@
 # Nutrition Tracker
 
-A self-contained, mobile-friendly nutrition diary. Log meals and drinks, scan barcodes via Open Food Facts, and track daily calories and macros. Everything is stored in the browser (`localStorage`) — no account or backend.
+A self-contained, mobile-friendly nutrition diary. Log meals and drinks, search products or scan barcodes via Open Food Facts, and track daily calories and macros. Everything is stored in the browser (`localStorage`) — no account or backend.
 
 ## Run locally
 
@@ -18,7 +18,8 @@ Any static server works (`npx serve`, `php -S`, etc.). Prefer **localhost** (or 
 
 - **Today dashboard** — calorie ring vs daily goal, macro bars, entries grouped by meal
 - **Add food** — name, meal type, serving, calories, optional protein/carbs/fat, notes
-- **Barcode** — camera scan (html5-qrcode) or type/paste; lookup via [Open Food Facts](https://world.openfoodfacts.org/) API; form is prefilled and editable before save
+- **Search food** — type a product name; debounced lookup via [Open Food Facts](https://world.openfoodfacts.org/) search API; pick a result to prefill nutrients (per serving or per 100 g), then adjust servings/meal and save
+- **Barcode** — camera scan (html5-qrcode) or type/paste; lookup via Open Food Facts product API; form is prefilled and editable before save
 - **Edit / delete** logged entries
 - **History** — jump to previous days that have logs
 - **Settings** — daily calorie goal (default 2000) and optional macro goals
@@ -27,7 +28,7 @@ Any static server works (`npx serve`, `php -S`, etc.). Prefer **localhost** (or 
 ## Limitations
 
 - **Camera** needs permission and a secure context (HTTPS or `localhost`). If the camera fails, use **Type / paste**.
-- **Open Food Facts** coverage varies by country and product; some barcodes return no data or incomplete nutrition. You can always edit values or add food manually.
+- **Open Food Facts** coverage varies by country and product; name search and barcodes can return incomplete nutrition or occasional API 503s. You can always edit values or add food manually.
 - Data lives only in **this browser’s localStorage** — clearing site data or using another device/browser will not carry it over.
 - Nutrition values from barcodes are typically per serving or per 100 g as reported by the product database; double-check before relying on them.
 
