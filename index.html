@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a5f4a" />
+  <meta name="description" content="Track meals, drinks, and macros — simple nutrition diary" />
+  <title>Nutrition Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="app-header">
+      <div class="header-inner">
+        <h1 class="logo">Nutrition</h1>
+        <nav class="tab-nav" role="tablist" aria-label="Main">
+          <button type="button" class="tab active" data-view="today" role="tab" aria-selected="true">Today</button>
+          <button type="button" class="tab" data-view="history" role="tab" aria-selected="false">History</button>
+          <button type="button" class="tab" data-view="settings" role="tab" aria-selected="false">Settings</button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="main">
+      <!-- TODAY -->
+      <section id="view-today" class="view active" role="tabpanel">
+        <div class="date-row">
+          <button type="button" class="icon-btn" id="prev-day" aria-label="Previous day">‹</button>
+          <h2 id="today-label" class="date-label">Today</h2>
+          <button type="button" class="icon-btn" id="next-day" aria-label="Next day" disabled>›</button>
+        </div>
+
+        <div class="summary-card" id="summary-card">
+          <div class="cal-ring-wrap">
+            <svg class="cal-ring" viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="ring-bg" cx="60" cy="60" r="52" />
+              <circle class="ring-fg" id="cal-ring-fg" cx="60" cy="60" r="52" />
+            </svg>
+            <div class="cal-ring-center">
+              <span class="cal-remaining" id="cal-remaining">2000</span>
+              <span class="cal-unit" id="cal-unit-label">left</span>
+            </div>
+          </div>
+          <div class="summary-stats">
+            <div class="stat">
+              <span class="stat-value" id="stat-eaten">0</span>
+              <span class="stat-label">eaten</span>
+            </div>
+            <div class="stat">
+              <span class="stat-value" id="stat-goal">2000</span>
+              <span class="stat-label">goal</span>
+            </div>
+          </div>
+          <div class="macro-bars" id="macro-bars">
+            <div class="macro-row">
+              <span class="macro-name">Protein</span>
+              <div class="bar"><div class="bar-fill protein" id="bar-protein"></div></div>
+              <span class="macro-val" id="val-protein">0g</span>
+            </div>
+            <div class="macro-row">
+              <span class="macro-name">Carbs</span>
+              <div class="bar"><div class="bar-fill carbs" id="bar-carbs"></div></div>
+              <span class="macro-val" id="val-carbs">0g</span>
+            </div>
+            <div class="macro-row">
+              <span class="macro-name">Fat</span>
+              <div class="bar"><div class="bar-fill fat" id="bar-fat"></div></div>
+              <span class="macro-val" id="val-fat">0g</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions-row">
+          <button type="button" class="btn btn-primary" id="btn-add">+ Add food</button>
+          <button type="button" class="btn btn-secondary" id="btn-barcode">Scan barcode</button>
+        </div>
+
+        <div id="entries-by-meal" class="entries-by-meal"></div>
+      </section>
+
+      <!-- HISTORY -->
+      <section id="view-history" class="view" role="tabpanel" hidden>
+        <h2 class="view-title">History</h2>
+        <p class="muted">Days with logged food appear here.</p>
+        <div id="history-list" class="history-list"></div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section id="view-settings" class="view" role="tabpanel" hidden>
+        <h2 class="view-title">Settings</h2>
+        <form id="settings-form" class="form-card">
+          <label class="field">
+            <span>Daily calorie goal</span>
+            <input type="number" id="goal-calories" min="500" max="10000" step="50" required />
+          </label>
+          <fieldset class="macro-goals">
+            <legend>Optional macro goals (grams)</legend>
+            <label class="field">
+              <span>Protein</span>
+              <input type="number" id="goal-protein" min="0" max="500" step="1" placeholder="e.g. 150" />
+            </label>
+            <label class="field">
+              <span>Carbs</span>
+              <input type="number" id="goal-carbs" min="0" max="800" step="1" placeholder="e.g. 200" />
+            </label>
+            <label class="field">
+              <span>Fat</span>
+              <input type="number" id="goal-fat" min="0" max="300" step="1" placeholder="e.g. 65" />
+            </label>
+          </fieldset>
+          <button type="submit" class="btn btn-primary">Save goals</button>
+          <p id="settings-saved" class="toast-inline" hidden>Saved</p>
+        </form>
+        <div class="form-card danger-zone">
+          <h3>Data</h3>
+          <p class="muted">All data stays in this browser’s local storage.</p>
+          <button type="button" class="btn btn-danger" id="btn-clear-data">Clear all data</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ADD / EDIT MODAL -->
+  <div id="modal-overlay" class="modal-overlay" hidden>
+    <div class="modal" role="dialog" aria-labelledby="modal-title" aria-modal="true">
+      <div class="modal-header">
+        <h2 id="modal-title">Add food</h2>
+        <button type="button" class="icon-btn" id="modal-close" aria-label="Close">×</button>
+      </div>
+      <form id="entry-form" class="modal-body">
+        <input type="hidden" id="entry-id" />
+        <label class="field">
+          <span>Name</span>
+          <input type="text" id="entry-name" required placeholder="e.g. Greek yogurt" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span>Meal type</span>
+          <select id="entry-meal" required>
+            <option value="breakfast">Breakfast</option>
+            <option value="lunch">Lunch</option>
+            <option value="dinner">Dinner</option>
+            <option value="snack">Snack</option>
+            <option value="drink">Drink</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Serving</span>
+          <input type="text" id="entry-serving" placeholder="e.g. 1 cup / 100g" />
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span>Calories</span>
+            <input type="number" id="entry-calories" min="0" max="10000" step="1" required />
+          </label>
+          <label class="field">
+            <span>Protein (g)</span>
+            <input type="number" id="entry-protein" min="0" max="1000" step="0.1" placeholder="—" />
+          </label>
+        </div>
+        <div class="field-row">
+          <label class="field">
+            <span>Carbs (g)</span>
+            <input type="number" id="entry-carbs" min="0" max="1000" step="0.1" placeholder="—" />
+          </label>
+          <label class="field">
+            <span>Fat (g)</span>
+            <input type="number" id="entry-fat" min="0" max="1000" step="0.1" placeholder="—" />
+          </label>
+        </div>
+        <label class="field">
+          <span>Notes</span>
+          <textarea id="entry-notes" rows="2" placeholder="Optional"></textarea>
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="btn-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- BARCODE MODAL -->
+  <div id="barcode-overlay" class="modal-overlay" hidden>
+    <div class="modal modal-wide" role="dialog" aria-labelledby="barcode-title" aria-modal="true">
+      <div class="modal-header">
+        <h2 id="barcode-title">Barcode lookup</h2>
+        <button type="button" class="icon-btn" id="barcode-close" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="barcode-tabs">
+          <button type="button" class="chip active" data-barcode-mode="scan">Camera</button>
+          <button type="button" class="chip" data-barcode-mode="manual">Type / paste</button>
+        </div>
+        <div id="scanner-pane">
+          <div id="qr-reader" class="qr-reader"></div>
+          <p class="muted center">Point your camera at a product barcode. Needs camera permission and HTTPS or localhost.</p>
+        </div>
+        <div id="manual-pane" hidden>
+          <label class="field">
+            <span>Barcode number</span>
+            <input type="text" id="barcode-input" inputmode="numeric" placeholder="e.g. 3017620422003" autocomplete="off" />
+          </label>
+          <button type="button" class="btn btn-primary" id="btn-lookup">Look up</button>
+        </div>
+        <p id="barcode-status" class="barcode-status" aria-live="polite"></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
