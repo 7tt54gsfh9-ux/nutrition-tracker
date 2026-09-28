@@ -437,7 +437,7 @@
   const SEARCH_DEBOUNCE_MS = 550;
   const SEARCH_MIN_CHARS = 2;
   const SEARCH_PAGE_SIZE = 20;
-  const SEARCH_MAX_ATTEMPTS = 6;
+  const SEARCH_MAX_ATTEMPTS = 8;
   const OFF_SEARCH_HOSTS = [
     "https://world.openfoodfacts.org",
     "https://us.openfoodfacts.org",
@@ -595,8 +595,8 @@
       const host = OFF_SEARCH_HOSTS[(start + attempt) % OFF_SEARCH_HOSTS.length];
       try {
         if (attempt > 0) {
-          // Gentle backoff: 400, 800, 1200, … ms (plus small jitter)
-          const delay = 400 * attempt + Math.floor(Math.random() * 200);
+          // Gentle backoff: 500, 1000, 1500, … ms (plus small jitter)
+          const delay = 500 * attempt + Math.floor(Math.random() * 250);
           await sleep(delay, signal);
         }
         return await fetchCgiSearch(host, q, signal);
